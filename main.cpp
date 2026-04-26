@@ -42,16 +42,19 @@ bool has_lambda(std::vector<string> v) {
     return false;
 }
 
+typedef std::deque<string> prodRight;
+
 struct production {
     string left;
-    std::deque<string> right;
+    prodRight right;
 
     production() {}
-    production(string left, std::deque<string> right):left(left), right(right) {}
+    production(string left, prodRight right):left(left), right(right) {}
 };
+
 std::deque<production> read_prod(string line) {
     string left;
-    std::deque<string> right;
+    prodRight right;
 
     std::deque<production> result;
     std::istringstream fin(line);
@@ -80,12 +83,17 @@ std::deque<production> read_prod(string line) {
     return result;
 }
 
-typedef std::map<string, std::set<string>> firstType;
+typedef std::map<string, std::set<string>> derivation;
 
 struct fullGrammar {
     std::vector<production> productions;
     std::set<string> nonTerminals;
-    firstType first;
+    derivation first;
+    derivation follow;
+
+    inline string get_start_nonterminal(){
+        return productions.front().left;
+    }
 
     void calculate_nonTerminals() {
         for (auto production : productions) {
@@ -93,7 +101,7 @@ struct fullGrammar {
         }
     }
 
-    void cacluate_first(bool verbose = false) {
+    void calculate_first(bool verbose = false) {
         first.clear();
         calculate_nonTerminals();
 
@@ -101,10 +109,10 @@ struct fullGrammar {
             first[nonTerminal]; /// insert with empty list
         }
 
-/*        std::list<production> remaining_prods (productions.begin(), productions.end());*/
+        /*        std::list<production> remaining_prods (productions.begin(), productions.end());*/
         bool newAddition = true;
         for(int k = 1; newAddition; k++) {
-            firstType oldFirst(first);
+            derivation oldFirst(first);
             newAddition = false;
 
             for (auto production : productions ) {
@@ -119,11 +127,11 @@ struct fullGrammar {
                         first[production.left].insert(terminal_first.begin(), terminal_first.end());
                         // First_k(A | A -> B) is First_k-1(B)
 
-                        if(oldFirst[current_element].count(LAMBDA) == 0){
+                        if(oldFirst[current_element].count(LAMBDA) == 0) {
 
                             break;
                         }
-                    } else{
+                    } else {
                         first[production.left].insert(current_element);
                         break;
                     }
@@ -146,11 +154,85 @@ struct fullGrammar {
 
         cout << "FIRST:\n";
         for (auto nonTerminal : nonTerminals) {
-               cout << nonTerminal << ": ";
-                for(auto terminal : first[nonTerminal])
-                    cout << terminal << ' ';
-                cout << "\n";
+            cout << nonTerminal << ": ";
+            for(auto terminal : first[nonTerminal])
+                cout << terminal << ' ';
+            cout << "\n";
+        }
+    }
+    void calculate_follow(bool verbose = false) {
+
+        if(first.empty())
+            calculate_first();
+
+        for (auto nonTerminal : nonTerminals) {
+            follow[nonTerminal];
+        }
+        follow[get_start_nonterminal()] = {"#"};
+
+
+        std::vector<production> new_prods;
+
+        for(auto production : productions) {
+            for(auto symb = production.right.begin(); symb != production.right.end(); symb++) {
+                if(is_terminal(*symb)) {
+                    prodRight right(std::next(symb), production.right.end());
+                    right.emplace_back(production.left); /// <-- the last element we have to calculate Follow!
+                    new_prods.emplace_back(*symb, right);
+                }
             }
+        }
+
+        bool newAddition = true;
+        for(int k = 1; newAddition; k++) {
+            newAddition = false;
+            derivation oldFollow(follow);
+
+            for (auto production : new_prods) {
+                size_t i = 0;
+                for(auto current_element : production.right) {
+                    i++;
+                    if(i == production.right.size()){
+                        auto terminal_follow = oldFollow[current_element];
+/*                        terminal_follow.erase(LAMBDA);*/
+
+                        follow[production.left].insert(terminal_follow.begin(), terminal_follow.end());
+                        break;
+                    }
+                    if(is_terminal(current_element)){
+                        auto terminal_follow = first[current_element];
+                        terminal_follow.erase(LAMBDA);
+
+                        follow[production.left].insert(terminal_follow.begin(), terminal_follow.end());
+
+                        if(first[current_element].count(LAMBDA) == 0) {
+                            break;
+                        }
+                    }
+                    else{
+                        follow[production.left].insert(current_element);
+                        break;
+                    }
+                }
+            }
+
+            for (auto nonTerminal : nonTerminals) {
+                if(follow[nonTerminal] > oldFollow[nonTerminal])
+                    newAddition = true;/// insert with empty list
+            }
+        }
+
+        if(!verbose)
+            return;
+
+        cout << "FOLLOW:\n";
+        for (auto nonTerminal : nonTerminals) {
+            cout << nonTerminal << ": ";
+            for(auto terminal : follow[nonTerminal])
+                cout << terminal << ' ';
+            cout << "\n";
+        }
+
     }
 };
 
@@ -170,7 +252,7 @@ int main() {
 
     cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
 
-    input_grammar.cacluate_first(true);
+    input_grammar.calculate_follow(1);
 
     return 0;
 }

@@ -1,3 +1,7 @@
+# specific proj
+main.cpp.save
+
+# github C++ gitignore:
 # Prerequisites
 *.d
 
