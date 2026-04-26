@@ -1,6 +1,5 @@
 E -> T R
-R -> + T R
-R -> * T R
+R -> + T R | * T R
 R -> lam
 T -> n
 T -> ( E )
