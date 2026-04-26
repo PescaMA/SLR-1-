@@ -31,15 +31,10 @@ ifstream getInputStream() {
     return fin;
 }
 
-bool is_terminal(string value) {
+bool is_non_terminal(const string& value) {
+    if(value.empty())
+            throw std::runtime_error("empty string checking if terminal");
     return isupper(value[0]);
-}
-bool has_lambda(std::vector<string> v) {
-    for(auto el : v) {
-        if (el == LAMBDA)
-            return true;
-    }
-    return false;
 }
 
 typedef std::deque<string> prodRight;
@@ -52,7 +47,7 @@ struct production {
     production(string left, prodRight right):left(left), right(right) {}
 };
 
-std::deque<production> read_prod(string line) {
+std::deque<production> read_prod(const string& line) {
     string left;
     prodRight right;
 
@@ -91,12 +86,15 @@ struct fullGrammar {
     derivation first;
     derivation follow;
 
-    inline string get_start_nonterminal(){
+    inline string get_start_nonterminal() {
+        if(productions.empty())
+            throw std::runtime_error("empty first terminal");
+
         return productions.front().left;
     }
 
     void calculate_nonTerminals() {
-        for (auto production : productions) {
+        for (const auto& production : productions) {
             nonTerminals.insert(production.left);
         }
     }
@@ -105,7 +103,7 @@ struct fullGrammar {
         first.clear();
         calculate_nonTerminals();
 
-        for (auto nonTerminal : nonTerminals) {
+        for (const auto& nonTerminal : nonTerminals) {
             first[nonTerminal]; /// insert with empty list
         }
 
@@ -115,11 +113,11 @@ struct fullGrammar {
             derivation oldFirst(first);
             newAddition = false;
 
-            for (auto production : productions ) {
+            for (const auto& production : productions ) {
                 size_t i = 0;
-                for(auto current_element : production.right) {
+                for(const auto& current_element : production.right) {
 
-                    if( is_terminal(current_element) ) {
+                    if( is_non_terminal(current_element) ) {
 
                         auto terminal_first = oldFirst[current_element];
                         terminal_first.erase(LAMBDA);
@@ -141,8 +139,8 @@ struct fullGrammar {
                     first[production.left].insert(LAMBDA);
             }
 
-            for (auto nonTerminal : nonTerminals) {
-                if(first[nonTerminal] > oldFirst[nonTerminal])
+            for (const auto& nonTerminal : nonTerminals) {
+                if(first[nonTerminal].size() > oldFirst[nonTerminal].size())
                     newAddition = true;/// insert with empty list
             }
 
@@ -153,19 +151,20 @@ struct fullGrammar {
 
 
         cout << "FIRST:\n";
-        for (auto nonTerminal : nonTerminals) {
+        for (const auto& nonTerminal : nonTerminals) {
             cout << nonTerminal << ": ";
-            for(auto terminal : first[nonTerminal])
+            for(const auto& terminal : first[nonTerminal])
                 cout << terminal << ' ';
             cout << "\n";
         }
     }
+
     void calculate_follow(bool verbose = false) {
 
         if(first.empty())
             calculate_first();
 
-        for (auto nonTerminal : nonTerminals) {
+        for (const auto& nonTerminal : nonTerminals) {
             follow[nonTerminal];
         }
         follow[get_start_nonterminal()] = {"#"};
@@ -173,9 +172,9 @@ struct fullGrammar {
 
         std::vector<production> new_prods;
 
-        for(auto production : productions) {
+        for(const auto& production : productions) {
             for(auto symb = production.right.begin(); symb != production.right.end(); symb++) {
-                if(is_terminal(*symb)) {
+                if(is_non_terminal(*symb)) {
                     prodRight right(std::next(symb), production.right.end());
                     right.emplace_back(production.left); /// <-- the last element we have to calculate Follow!
                     new_prods.emplace_back(*symb, right);
@@ -188,18 +187,18 @@ struct fullGrammar {
             newAddition = false;
             derivation oldFollow(follow);
 
-            for (auto production : new_prods) {
+            for (const auto& production : new_prods) {
                 size_t i = 0;
-                for(auto current_element : production.right) {
+                for(const auto& current_element : production.right) {
                     i++;
-                    if(i == production.right.size()){
-                        auto terminal_follow = oldFollow[current_element];
-/*                        terminal_follow.erase(LAMBDA);*/
+                    if(i == production.right.size()) {
+                        const auto& terminal_follow = oldFollow[current_element];
+                        /*                        terminal_follow.erase(LAMBDA);*/
 
                         follow[production.left].insert(terminal_follow.begin(), terminal_follow.end());
                         break;
                     }
-                    if(is_terminal(current_element)){
+                    if(is_non_terminal(current_element)) {
                         auto terminal_follow = first[current_element];
                         terminal_follow.erase(LAMBDA);
 
@@ -208,16 +207,15 @@ struct fullGrammar {
                         if(first[current_element].count(LAMBDA) == 0) {
                             break;
                         }
-                    }
-                    else{
+                    } else {
                         follow[production.left].insert(current_element);
                         break;
                     }
                 }
             }
 
-            for (auto nonTerminal : nonTerminals) {
-                if(follow[nonTerminal] > oldFollow[nonTerminal])
+            for (const auto& nonTerminal : nonTerminals) {
+                if(follow[nonTerminal].size() > oldFollow[nonTerminal].size())
                     newAddition = true;/// insert with empty list
             }
         }
@@ -226,9 +224,9 @@ struct fullGrammar {
             return;
 
         cout << "FOLLOW:\n";
-        for (auto nonTerminal : nonTerminals) {
+        for (const auto& nonTerminal : nonTerminals) {
             cout << nonTerminal << ": ";
-            for(auto terminal : follow[nonTerminal])
+            for(const auto& terminal : follow[nonTerminal])
                 cout << terminal << ' ';
             cout << "\n";
         }
