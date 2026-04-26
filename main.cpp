@@ -1,11 +1,12 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
+#include <sstream> /// for string as stream
 
 using string = std::string;
 using ifstream = std::ifstream;
 using std::cout;
-
 
 const string DEFAULT_FILE = "input.txt";
 
@@ -25,16 +26,43 @@ ifstream getInputStream(){
     return fin;
 }
 
+bool is_terminal(string value){
+    return isupper(value[0]);
+}
+
+struct production{
+    string left;
+    std::vector<string> right;
+
+    bool read(string line){
+
+            std::istringstream fin(line);
+        fin >> left;
+        if (!isupper(left[0]))
+            return false;
+
+        string arrow;
+        fin >> arrow;
+        if(arrow != "->")
+            return false;
+
+        string s;
+        while (fin >> s)
+            right.push_back(s);
+
+        return true;
+    }
+};
+
 int main()
 {
     ifstream fin = getInputStream();
 
-    string input = "";
     string line;
     while (getline(fin, line)) {
-        input += line + "\n";
+        production p;
+        std::cout << p.read(line);
     }
 
-    cout << input << '\n';
     return 0;
 }
