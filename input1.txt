@@ -1,0 +1,4 @@
+S -> A b B | lam
+A -> e D   | b
+B -> a S d | c
+D -> S B A

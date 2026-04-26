@@ -93,13 +93,14 @@ struct fullGrammar {
         }
     }
 
-    void cacluate_first(bool verbose = false) {
+    void cacluate_first() {
         first.clear();
         calculate_nonTerminals();
 
         for (auto nonTerminal : nonTerminals) {
             first[nonTerminal]; /// insert with empty list
         }
+        cout << first.size();
 
 /*        std::list<production> remaining_prods (productions.begin(), productions.end());*/
         bool newAddition = true;
@@ -108,7 +109,7 @@ struct fullGrammar {
             newAddition = false;
 
             for (auto production : productions ) {
-                size_t i = 0;
+                 i = 0;
                 for(auto current_element : production.right) {
 
                     if( is_terminal(current_element) ) {
@@ -140,10 +141,6 @@ struct fullGrammar {
 
         }
 
-        if(!verbose)
-            return;
-
-
         cout << "FIRST:\n";
         for (auto nonTerminal : nonTerminals) {
                cout << nonTerminal << ": ";
@@ -170,7 +167,7 @@ int main() {
 
     cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
 
-    input_grammar.cacluate_first(true);
+    input_grammar.cacluate_first();
 
     return 0;
 }
