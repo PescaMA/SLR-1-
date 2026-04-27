@@ -87,11 +87,6 @@ enum class actionType {
     REDUCE,
     GO_TO
 };
-struct lrTable {
-    actionType action_type = actionType::ERROR;
-    int index = 0; /// for shift, reduce, goto
-
-};
 std::string get_action(actionType a) {
     switch (a) {
     case actionType::ERROR:
@@ -107,6 +102,19 @@ std::string get_action(actionType a) {
     }
     return "UNKNOWN";
 }
+struct lrTable {
+    actionType action_type = actionType::ERROR;
+    int index = 0; /// for shift, reduce, goto
+
+    std::string print(){
+        string res = get_action(action_type);
+        if(action_type == actionType::SHIFT || action_type == actionType::GO_TO ||action_type == actionType::REDUCE)
+            res += " " + std::to_string(index);
+        return res;
+    }
+
+};
+
 
 
 struct canonicProd {
@@ -330,10 +338,10 @@ struct fullGrammar {
         }
 
     }
-    void calculate_syntax_table(bool verbose = false) {
+    bool calculate_syntax_table(bool verbose = false) {
 
         if(productions.empty())
-            return;
+            return true;
 
         if(follow.empty())
             calculate_follow();
@@ -377,8 +385,6 @@ struct fullGrammar {
                     }
 
                 }
-
-                /// cout << "Size of productions to check: " << new_prods.size() << std::endl;
 
                 for(auto prod : new_prods) {
 
@@ -452,16 +458,17 @@ struct fullGrammar {
 
 
         if(!verbose)
-            return;
+            return true;
 
         for(size_t i=0; i<sintaxTable.size(); i++) {
             cout << i << ": \n";
             for(auto pair_val : sintaxTable[i]) {
                 auto val = pair_val.second;
-                cout << pair_val.first << ' ' << get_action(val.action_type) << ' ' << val.index << '\n';
+                cout << pair_val.first << ' ' << val.print() << '\n';
             }
             cout << '\n';
         }
+        return true;
     }
     std::vector<int> analyze(std::string line, bool verbose = false) {
         std::istringstream fin(line);
@@ -476,25 +483,28 @@ struct fullGrammar {
         std::vector<int> right_der;
 
         for(int derivation_count = 0; derivation_count < 10000; derivation_count ++) {
-            cout << "(";
-            for(string val : stk) {
-                cout << val;
+
+            if(verbose){
+                cout << "(";
+                for(string val : stk) {
+                    cout << val;
+                }
+                cout << ", ";
+                for(string val : input) {
+                    cout << val;
+                }
+                cout << ", ";
+                for(int val : right_der) {
+                    cout << val;
+                }
+                if(right_der.empty())
+                    cout << LAMBDA;
+                cout << ") |-";
             }
-            cout << ", ";
-            for(string val : input) {
-                cout << val;
-            }
-            cout << ", ";
-            for(int val : right_der) {
-                cout << val;
-            }
-            if(right_der.empty())
-                cout << LAMBDA;
-            cout << ") |-" << std::endl;
+
 
 
             if(sintaxTable[ std::stoi( stk.back() ) ].count(input.front()) == 0) {
-                cout << " ERROR ";
                 return std::vector<int>();
             }
             lrTable lookup = sintaxTable[ std::stoi( stk.back() ) ][input.front()];
@@ -518,9 +528,10 @@ struct fullGrammar {
             }
 
             if(lookup.action_type == actionType::ACCEPT) {
-                cout << " ACCEPT\n";
                 return right_der;
             }
+            if(verbose) cout << lookup.print() << std::endl;
+
         }
         return std::vector<int>();
     }
@@ -545,7 +556,7 @@ int main() {
     cout << "Input ";
     getline(std::cin, line);
     while(getline(std::cin, line)) {
-        std::vector<int> left_derriv = input_grammar.analyze(line);
+        std::vector<int> left_derriv = input_grammar.analyze(line, true);
 
         if(left_derriv.empty()) {
             cout << "DENY";
