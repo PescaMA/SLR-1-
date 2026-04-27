@@ -7,6 +7,7 @@
 #include <set>
 #include <map>
 #include <list>
+#include <algorithm> /// for find
 
 using string = std::string;
 using ifstream = std::ifstream;
@@ -33,7 +34,7 @@ ifstream getInputStream() {
 
 bool is_non_terminal(const string& value) {
     if(value.empty())
-            throw std::runtime_error("empty string checking if terminal");
+        throw std::runtime_error("empty string checking if terminal");
     return isupper(value[0]);
 }
 
@@ -78,24 +79,95 @@ std::deque<production> read_prod(const string& line) {
     return result;
 }
 
+struct lrTable {
+    enum actionType {
+        ERROR,
+        ACCEPT,
+        SHIFT,
+        REDUCE,
+        GO_TO
+    } action_type = ERROR;
+    int index = 0; /// for shift, reduce, goto
+
+};
+
+
+struct canonicProd {
+    string left;
+    prodRight right;
+    prodRight::iterator dot_val;
+    int dot_pos = 0;
+    int next_canonic_set;
+
+    canonicProd(std::string left, prodRight new_right): left(left), right(new_right) {
+        dot_val = right.begin();
+    }
+    canonicProd(production prod): left(prod.left), right(prod.right) {
+        dot_val = right.begin();
+    }
+
+    void move_dot() {
+        dot_val++;
+        dot_pos++;
+    }
+
+};
+
+inline bool operator==(canonicProd const& a, canonicProd const& b) noexcept {
+    return a.left == b.left
+           && a.right == b.right
+           && a.dot_pos == b.dot_pos;
+}
+
+inline bool operator<(canonicProd const& a, canonicProd const& b) noexcept {
+    if (a.left != b.left) return a.left < b.left;
+    if (a.right != b.right) return a.right < b.right;
+    return a.dot_pos < b.dot_pos;
+}
+
+
+
 typedef std::map<string, std::set<string>> derivation;
+typedef std::vector<std::map<std::string,lrTable>> table;
+
 
 struct fullGrammar {
     std::vector<production> productions;
     std::set<string> nonTerminals;
+    std::set<string> terminals;
     derivation first;
     derivation follow;
+    table sintaxTable;
 
-    inline string get_start_nonterminal() {
+    inline string get_start() {
         if(productions.empty())
             throw std::runtime_error("empty first terminal");
 
         return productions.front().left;
     }
+    inline string get_fake_start() {
+        std::string start = get_start();
+        return start + "'0000";
+    }
+    std::map< string, std::vector<prodRight>> get_prod_map() {
+        std::map<std::string, std::vector<prodRight>> m;
+        for (const auto& p : productions)
+            m[p.left].push_back(p.right);
+        return m;
+    }
 
     void calculate_nonTerminals() {
         for (const auto& production : productions) {
             nonTerminals.insert(production.left);
+        }
+    }
+
+    void calculate_terminals() {
+        for (const auto& production : productions) {
+            for (const auto& val : production.right) {
+                if(!is_non_terminal(val))
+                    terminals.insert(val);
+            }
         }
     }
 
@@ -167,7 +239,7 @@ struct fullGrammar {
         for (const auto& nonTerminal : nonTerminals) {
             follow[nonTerminal];
         }
-        follow[get_start_nonterminal()] = {"#"};
+        follow[get_start()] = {"#"};
 
 
         std::vector<production> new_prods;
@@ -232,6 +304,122 @@ struct fullGrammar {
         }
 
     }
+    void calculate_syntax_table(bool verbose = false) {
+
+        if(productions.empty())
+            return;
+
+        if(follow.empty())
+            calculate_follow();
+        calculate_terminals();
+
+        auto productions_map = get_prod_map();
+
+
+        std::set<canonicProd> known_prod;
+        std::vector<canonicProd> set_prod;
+        canonicProd a(get_fake_start(), {get_start()});
+        a.next_canonic_set = 1;
+
+
+
+        set_prod.push_back(a);
+
+        int nr_canonic_prod = 0;
+
+        for(int i = 0; i<= nr_canonic_prod; i++) {
+
+            cout << "starting loop " << i << std::endl;
+
+            sintaxTable.emplace_back();
+
+            std::vector <string> checkNonTerminal;
+            canonicProd current_prod = set_prod[i];
+
+
+            if(current_prod.dot_val == current_prod.right.end()) {
+
+                continue;
+            }
+            cout << "setup i " << i << std::endl;
+
+            if( !is_non_terminal(*current_prod.dot_val) ) {
+                int pos;
+                if(known_prod.count(current_prod) > 0)
+                    pos = known_prod.find(current_prod)->next_canonic_set;
+                else {
+                    pos = ++nr_canonic_prod;
+                    current_prod.next_canonic_set = pos;
+
+
+                    canonicProd added_prod = current_prod;
+                    added_prod.move_dot();
+                    known_prod.insert(current_prod);
+                    set_prod.push_back(current_prod);
+                }
+
+
+                sintaxTable[i][*current_prod.dot_val] = {lrTable::SHIFT, pos};
+                continue;
+            }
+
+
+            checkNonTerminal.push_back(*current_prod.dot_val);
+
+            for(size_t check_cnt = 0; check_cnt < checkNonTerminal.size(); check_cnt++) {
+                for(auto prod : productions_map[checkNonTerminal[check_cnt]]) {
+
+                    current_prod = canonicProd(checkNonTerminal[check_cnt],prod);
+
+                    if(current_prod.dot_val == current_prod.right.end()) {
+
+                        continue;
+                    }
+
+                    int pos;
+                    if(known_prod.count(current_prod) > 0)
+                        pos = known_prod.find(current_prod)->next_canonic_set;
+                    else {
+                        pos = ++nr_canonic_prod;
+                        current_prod.next_canonic_set = pos;
+
+
+                        canonicProd added_prod = current_prod;
+                        added_prod.move_dot();
+                        known_prod.insert(added_prod);
+                        set_prod.push_back(added_prod);
+                    }
+
+                    cout << i << std::endl;
+
+
+                    if( !is_non_terminal(*current_prod.dot_val) ) {
+
+
+                        sintaxTable[i][*current_prod.dot_val] = {lrTable::SHIFT, pos};
+                        continue;
+                    }
+
+                    if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), *current_prod.dot_val) == checkNonTerminal.end()) {
+                        checkNonTerminal.push_back(*current_prod.dot_val);
+                    }
+                }
+            }
+        }
+
+
+        if(!verbose)
+            return;
+
+        for(size_t i=0; i<sintaxTable.size(); i++) {
+            cout << i << ": \n";
+            for(auto pair_val : sintaxTable[i]) {
+                auto val = pair_val.second;
+                cout << pair_val.first << ' ' << val.action_type << ' ' << val.index << '\n';
+            }
+            cout << '\n';
+        }
+    }
 };
 
 
@@ -250,7 +438,7 @@ int main() {
 
     cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
 
-    input_grammar.calculate_follow(1);
+    input_grammar.calculate_syntax_table(1);
 
     return 0;
 }
