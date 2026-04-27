@@ -100,13 +100,13 @@ struct canonicProd {
 
     canonicProd(std::string left, prodRight new_right): left(left), right(new_right.begin(), new_right.end()) {
     }
-    canonicProd(production prod): canonicProd(prod.left, prod.right){}
+    canonicProd(production prod): canonicProd(prod.left, prod.right) {}
 
     void move_dot() {
         dot_pos++;
     }
 
-    std::string get_dot_val(){
+    std::string get_dot_val() {
         if(dot_pos >= right.size())
             return "";
         return right[dot_pos];
@@ -126,11 +126,8 @@ inline bool operator<(canonicProd const& a, canonicProd const& b) noexcept {
     return a.dot_pos < b.dot_pos;
 }
 
-
-
 typedef std::map<string, std::set<string>> derivation;
 typedef std::vector<std::map<std::string,lrTable>> table;
-
 
 struct fullGrammar {
     std::vector<production> productions;
@@ -330,27 +327,26 @@ struct fullGrammar {
 
         for(int i = 0; i<= nr_canonic_prod; i++) {
 
-            if(i > 100){
+            if(i > 100) {
                 exit(1);
             }
 
-            cout << "starting loop " << i  << ' ' << known_prod.size() << std::endl;
+            if(verbose) cout << "\nI" << i << " = [\n";
 
             sintaxTable.emplace_back();
 
             std::vector <string> checkNonTerminal;
             canonicProd current_prod = set_prod[i];
 
-            for(int check_cnt = -1; check_cnt + 1 < checkNonTerminal.size() + 1; check_cnt++) {
+            for(int check_cnt = -1; check_cnt < (int) checkNonTerminal.size(); check_cnt++) {
                 string nonTerminal;
                 std::list<prodRight>new_prods;
-                if(check_cnt == -1){
+                if(check_cnt == -1) {
                     nonTerminal = current_prod.left;
                     prodRight p;
                     p.insert(p.begin(), current_prod.right.begin(), current_prod.right.end());
                     new_prods.push_back(p);
-                }
-                else{
+                } else {
                     nonTerminal = checkNonTerminal[check_cnt];
                     auto mp = productions_map[checkNonTerminal[check_cnt]];
                     new_prods.insert(new_prods.begin(), mp.begin(), mp.end());
@@ -363,42 +359,48 @@ struct fullGrammar {
                     if(check_cnt > -1)
                         current_prod = canonicProd(nonTerminal,prod);
 
-                    cout << nonTerminal << ": ";
-                    int _i = 0;
-                    if(_i == current_prod.dot_pos) cout << ".";
-                    for(auto el : prod){
-
-                        cout << el << ' ';
-                        _i ++;
+                    if(verbose) {
+                        cout << "   " << nonTerminal << " -> ";
+                        size_t _i = 0;
                         if(_i == current_prod.dot_pos) cout << ".";
+                        for(auto el : prod) {
+
+                            if(el != LAMBDA)
+                                cout << el << ' ';
+                            _i ++;
+                            if(_i == current_prod.dot_pos) cout << ".";
+                        }
                     }
-                    cout << '\n';
 
-
-
+                    while(current_prod.get_dot_val() == LAMBDA){
+                        current_prod.move_dot();
+                    }
                     if(current_prod.get_dot_val() == "") {
 
+                        if(verbose)cout << "\n";
                         continue;
                     }
 
-                    int pos;
                     if(known_prod.count(current_prod) > 0)
-                        pos = known_prod.find(current_prod)->next_canonic_set;
+                        current_prod.next_canonic_set = known_prod.find(current_prod)->next_canonic_set;
                     else {
-                        pos = ++nr_canonic_prod;
-                        current_prod.next_canonic_set = pos;
-
+                        ++nr_canonic_prod;
+                        current_prod.next_canonic_set = nr_canonic_prod;
+                        known_prod.insert(current_prod);
 
                         canonicProd added_prod = current_prod;
                         added_prod.move_dot();
-                        known_prod.insert(added_prod);
+
                         set_prod.push_back(added_prod);
                     }
+
+                    if(verbose) cout << " ----> I" << current_prod.next_canonic_set << '\n';
+
 
                     if( !is_non_terminal(current_prod.get_dot_val()) ) {
 
 
-                        sintaxTable[i][current_prod.get_dot_val()] = {lrTable::SHIFT, pos};
+                        sintaxTable[i][current_prod.get_dot_val()] = {lrTable::SHIFT, current_prod.next_canonic_set};
                         continue;
                     }
 
@@ -407,6 +409,7 @@ struct fullGrammar {
                     }
                 }
             }
+            if(verbose) cout << "]\n";
         }
 
 
@@ -438,7 +441,7 @@ int main() {
         input_grammar.productions.insert(input_grammar.productions.end(), new_productions.begin(),new_productions.end());
     }
 
-    cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
+    // cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
 
     input_grammar.calculate_syntax_table(1);
 
