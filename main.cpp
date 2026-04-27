@@ -94,21 +94,22 @@ struct lrTable {
 
 struct canonicProd {
     string left;
-    prodRight right;
-    prodRight::iterator dot_val;
-    int dot_pos = 0;
+    std::vector<std::string> right;
+    size_t dot_pos = 0;
     int next_canonic_set;
 
-    canonicProd(std::string left, prodRight new_right): left(left), right(new_right) {
-        dot_val = right.begin();
+    canonicProd(std::string left, prodRight new_right): left(left), right(new_right.begin(), new_right.end()) {
     }
-    canonicProd(production prod): left(prod.left), right(prod.right) {
-        dot_val = right.begin();
-    }
+    canonicProd(production prod): canonicProd(prod.left, prod.right){}
 
     void move_dot() {
-        dot_val++;
         dot_pos++;
+    }
+
+    std::string get_dot_val(){
+        if(dot_pos >= right.size())
+            return "";
+        return right[dot_pos];
     }
 
 };
@@ -329,49 +330,53 @@ struct fullGrammar {
 
         for(int i = 0; i<= nr_canonic_prod; i++) {
 
-            cout << "starting loop " << i << std::endl;
+            if(i > 100){
+                exit(1);
+            }
+
+            cout << "starting loop " << i  << ' ' << known_prod.size() << std::endl;
 
             sintaxTable.emplace_back();
 
             std::vector <string> checkNonTerminal;
             canonicProd current_prod = set_prod[i];
 
-
-            if(current_prod.dot_val == current_prod.right.end()) {
-
-                continue;
-            }
-            cout << "setup i " << i << std::endl;
-
-            if( !is_non_terminal(*current_prod.dot_val) ) {
-                int pos;
-                if(known_prod.count(current_prod) > 0)
-                    pos = known_prod.find(current_prod)->next_canonic_set;
-                else {
-                    pos = ++nr_canonic_prod;
-                    current_prod.next_canonic_set = pos;
-
-
-                    canonicProd added_prod = current_prod;
-                    added_prod.move_dot();
-                    known_prod.insert(current_prod);
-                    set_prod.push_back(current_prod);
+            for(int check_cnt = -1; check_cnt + 1 < checkNonTerminal.size() + 1; check_cnt++) {
+                string nonTerminal;
+                std::list<prodRight>new_prods;
+                if(check_cnt == -1){
+                    nonTerminal = current_prod.left;
+                    prodRight p;
+                    p.insert(p.begin(), current_prod.right.begin(), current_prod.right.end());
+                    new_prods.push_back(p);
+                }
+                else{
+                    nonTerminal = checkNonTerminal[check_cnt];
+                    auto mp = productions_map[checkNonTerminal[check_cnt]];
+                    new_prods.insert(new_prods.begin(), mp.begin(), mp.end());
                 }
 
+                /// cout << "Size of productions to check: " << new_prods.size() << std::endl;
 
-                sintaxTable[i][*current_prod.dot_val] = {lrTable::SHIFT, pos};
-                continue;
-            }
+                for(auto prod : new_prods) {
+
+                    if(check_cnt > -1)
+                        current_prod = canonicProd(nonTerminal,prod);
+
+                    cout << nonTerminal << ": ";
+                    int _i = 0;
+                    if(_i == current_prod.dot_pos) cout << ".";
+                    for(auto el : prod){
+
+                        cout << el << ' ';
+                        _i ++;
+                        if(_i == current_prod.dot_pos) cout << ".";
+                    }
+                    cout << '\n';
 
 
-            checkNonTerminal.push_back(*current_prod.dot_val);
 
-            for(size_t check_cnt = 0; check_cnt < checkNonTerminal.size(); check_cnt++) {
-                for(auto prod : productions_map[checkNonTerminal[check_cnt]]) {
-
-                    current_prod = canonicProd(checkNonTerminal[check_cnt],prod);
-
-                    if(current_prod.dot_val == current_prod.right.end()) {
+                    if(current_prod.get_dot_val() == "") {
 
                         continue;
                     }
@@ -390,18 +395,15 @@ struct fullGrammar {
                         set_prod.push_back(added_prod);
                     }
 
-                    cout << i << std::endl;
+                    if( !is_non_terminal(current_prod.get_dot_val()) ) {
 
 
-                    if( !is_non_terminal(*current_prod.dot_val) ) {
-
-
-                        sintaxTable[i][*current_prod.dot_val] = {lrTable::SHIFT, pos};
+                        sintaxTable[i][current_prod.get_dot_val()] = {lrTable::SHIFT, pos};
                         continue;
                     }
 
-                    if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), *current_prod.dot_val) == checkNonTerminal.end()) {
-                        checkNonTerminal.push_back(*current_prod.dot_val);
+                    if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), current_prod.get_dot_val()) == checkNonTerminal.end()) {
+                        checkNonTerminal.push_back(current_prod.get_dot_val());
                     }
                 }
             }
