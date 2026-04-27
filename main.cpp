@@ -33,10 +33,13 @@ ifstream getInputStream() {
     return fin;
 }
 
-bool is_non_terminal(const string& value) {
+inline bool is_non_terminal(const string& value) {
     if(value.empty())
         throw std::runtime_error("empty string checking if terminal");
     return isupper(value[0]);
+}
+inline bool is_terminal(const string& value){
+    return !is_non_terminal(value);
 }
 
 typedef std::deque<string> prodRight;
@@ -199,7 +202,7 @@ struct fullGrammar {
     void calculate_terminals() {
         for (const auto& production : productions) {
             for (const auto& val : production.right) {
-                if(!is_non_terminal(val))
+                if(is_terminal(val))
                     terminals.insert(val);
             }
         }
@@ -338,6 +341,10 @@ struct fullGrammar {
         }
 
     }
+
+    /// shift I_k = with terminal we get to I_k
+    /// go_to I_k = with non-terminal we go to I_k
+    /// reduce derivation_nr = we finished non_terminal from specified production
     bool calculate_syntax_table(bool verbose = false) {
 
         if(productions.empty())
@@ -417,6 +424,10 @@ struct fullGrammar {
                             sintaxTable[i][HASHTAG] = {actionType::ACCEPT, -1};
                         else {
                             for (auto x : follow[current_prod.prod.left]) {
+                                if(sintaxTable[i].count(x) > 0){
+                                    return false;
+                                }
+
                                 sintaxTable[i][x] = {actionType::REDUCE, current_prod.prod.production_nr};
                             }
 
@@ -441,7 +452,13 @@ struct fullGrammar {
                     if(verbose) cout << " ----> I" << current_prod.next_canonic_set << '\n';
 
 
-                    if( !is_non_terminal(current_prod.get_dot_val()) ) {
+                    if( is_terminal(current_prod.get_dot_val()) ) {
+                        if(sintaxTable[i].count(current_prod.get_dot_val()) > 0
+                           // && sintaxTable[i][current_prod.get_dot_val()].action_type != actionType::SHIFT
+                           ){
+                            return false;
+                        }
+
                         sintaxTable[i][current_prod.get_dot_val()] = {actionType::SHIFT, current_prod.next_canonic_set};
                         continue;
                     }
@@ -551,7 +568,15 @@ int main() {
         input_grammar.productions.insert(input_grammar.productions.end(), new_productions.begin(),new_productions.end());
     }
 
-    input_grammar.calculate_syntax_table(1);
+    bool is_slr = input_grammar.calculate_syntax_table(1);
+
+    if(is_slr){
+        cout << "DA (e SLR).\n";
+    }
+    else{
+        cout << "NU (nu e SLR)\n";
+        return 0;
+    }
 
     cout << "Input ";
     getline(std::cin, line);
