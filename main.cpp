@@ -356,79 +356,77 @@ struct fullGrammar {
         calculate_production_nr();
 
         std::set<canonicProd> known_prod;
-        std::vector<canonicProd> set_prod;
+        std::vector< std::vector <canonicProd> > set_prod;
+
         canonicProd a(get_fake_start(), {get_start()});
         a.prod.production_nr = 0;
         a.next_canonic_set = 1;
-
-
-
-        set_prod.push_back(a);
+        set_prod.push_back({a});
 
         int nr_canonic_prod = 0;
 
         for(int i = 0; i<= nr_canonic_prod; i++) {
 
+            if(verbose) cout << "\nI" << i << " = [\n";
             if(i > 100) {
                 exit(1);
             }
-
-
             sintaxTable.emplace_back();
 
             std::vector <string> checkNonTerminal;
-            canonicProd current_prod = set_prod[i];
 
+            std::map <string, size_t> go_to;
 
-            if(verbose) cout << "\nI" << i << " = [\n";
             for(int check_cnt = -1; check_cnt < (int) checkNonTerminal.size(); check_cnt++) {
-                std::list<production>new_prods;
+                std::list<canonicProd>new_prods;
+
                 if(check_cnt == -1) {
-                    new_prods.push_back(current_prod.prod);
+                    for (auto prod : set_prod[i]){
+                        new_prods.push_back(prod);
+                    }
                 } else {
                     for(production prod : productions) {
                         if(prod.left == checkNonTerminal[check_cnt])
-                            new_prods.push_back(prod);
+                            new_prods.emplace_back(prod);
                     }
 
                 }
 
                 for(auto prod : new_prods) {
 
-
-                    if(check_cnt > -1)
-                        current_prod = canonicProd(prod);
-
                     if(verbose) {
-                        cout << "   " << current_prod.prod.left << " -> ";
+                        cout << "   " << prod.prod.left << " -> ";
                         size_t _i = 0;
-                        if(_i == current_prod.dot_pos) cout << ".";
-                        for(auto el : prod.right) {
+                        if(_i == prod.dot_pos) cout << ".";
+                        for(auto el : prod.prod.right) {
 
                             if(el != LAMBDA)
                                 cout << el << ' ';
                             _i ++;
-                            if(_i == current_prod.dot_pos) cout << ".";
+                            if(_i == prod.dot_pos) cout << ".";
                         }
                     }
 
-                    while(current_prod.get_dot_val() == LAMBDA) {
-                        current_prod.move_dot();
+                    while(prod.get_dot_val() == LAMBDA) {
+                        prod.move_dot();
                     }
-                    if(current_prod.get_dot_val() == "") {
+                    if(prod.get_dot_val() == "") {
 
                         if(verbose)cout << "\n";
 
-                        current_prod.dot_pos--;
-                        if(current_prod.prod.left == get_fake_start() )
+                        prod.dot_pos--;
+                        if(prod.prod.left == get_fake_start() )
                             sintaxTable[i][HASHTAG] = {actionType::ACCEPT, -1};
                         else {
-                            for (auto x : follow[current_prod.prod.left]) {
+                            for (auto x : follow[prod.prod.left]) {
                                 if(sintaxTable[i].count(x) > 0){
+
+                                    if(verbose) cout << "Cannot add REDUCE to a " << sintaxTable[i][x].print() << ' ';
+
                                     return false;
                                 }
 
-                                sintaxTable[i][x] = {actionType::REDUCE, current_prod.prod.production_nr};
+                                sintaxTable[i][x] = {actionType::REDUCE, prod.prod.production_nr};
                             }
 
                         }
@@ -436,37 +434,49 @@ struct fullGrammar {
                         continue;
                     }
 
-                    if(known_prod.count(current_prod) > 0)
-                        current_prod.next_canonic_set = known_prod.find(current_prod)->next_canonic_set;
+                    if(known_prod.count(prod) > 0)
+                        prod.next_canonic_set = known_prod.find(prod)->next_canonic_set;
                     else {
-                        ++nr_canonic_prod;
-                        current_prod.next_canonic_set = nr_canonic_prod;
-                        known_prod.insert(current_prod);
 
-                        canonicProd added_prod = current_prod;
+                        if(go_to.count(prod.get_dot_val()) > 0){
+                            prod.next_canonic_set = go_to[prod.get_dot_val()];
+                        }
+                        else{
+                            ++nr_canonic_prod;
+                            prod.next_canonic_set = nr_canonic_prod;
+                            set_prod.push_back({});
+                        }
+                        go_to[prod.get_dot_val()] = prod.next_canonic_set;
+
+                        known_prod.insert(prod);
+
+                        canonicProd added_prod = prod;
                         added_prod.move_dot();
 
-                        set_prod.push_back(added_prod);
+                        set_prod[added_prod.next_canonic_set].push_back(added_prod);
                     }
 
-                    if(verbose) cout << " ----> I" << current_prod.next_canonic_set << '\n';
+                    if(verbose) cout << " ----> I" << prod.next_canonic_set << '\n';
 
 
-                    if( is_terminal(current_prod.get_dot_val()) ) {
-                        if(sintaxTable[i].count(current_prod.get_dot_val()) > 0
-                           // && sintaxTable[i][current_prod.get_dot_val()].action_type != actionType::SHIFT
+                    if( is_terminal(prod.get_dot_val()) ) {
+                        if(sintaxTable[i].count(prod.get_dot_val()) > 0
+                           && sintaxTable[i][prod.get_dot_val()].action_type != actionType::SHIFT
                            ){
+
+                            if(verbose) cout << "Cannot add SHIFT to a " << sintaxTable[i][prod.get_dot_val()].print();
+
                             return false;
                         }
 
-                        sintaxTable[i][current_prod.get_dot_val()] = {actionType::SHIFT, current_prod.next_canonic_set};
+                        sintaxTable[i][prod.get_dot_val()] = {actionType::SHIFT, prod.next_canonic_set};
                         continue;
                     }
 
-                    sintaxTable[i][current_prod.get_dot_val()] = {actionType::GO_TO, current_prod.next_canonic_set};
+                    sintaxTable[i][prod.get_dot_val()] = {actionType::GO_TO, prod.next_canonic_set};
 
-                    if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), current_prod.get_dot_val()) == checkNonTerminal.end()) {
-                        checkNonTerminal.push_back(current_prod.get_dot_val());
+                    if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), prod.get_dot_val()) == checkNonTerminal.end()) {
+                        checkNonTerminal.push_back(prod.get_dot_val());
                     }
                 }
             }
