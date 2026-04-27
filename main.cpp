@@ -156,6 +156,15 @@ struct fullGrammar {
     derivation follow;
     table sintaxTable;
 
+    int get_prod_size(int i) {
+        i--;
+        if( i >= (int) productions.size())
+            throw std::runtime_error("production index out of bounds");
+
+        if(productions[i].right.front() == LAMBDA)
+            return 0;
+        return productions[i].right.size();
+    }
     inline string get_start() {
         if(productions.empty())
             throw std::runtime_error("empty first terminal");
@@ -454,6 +463,67 @@ struct fullGrammar {
             cout << '\n';
         }
     }
+    std::vector<int> analyze(std::string line, bool verbose = false) {
+        std::istringstream fin(line);
+        string s;
+        std::deque<string> input;
+        while(fin >> s) {
+            input.push_back(s);
+        }
+        input.push_back(HASHTAG);
+        std::vector<string> stk;
+        stk.push_back("0");
+        std::vector<int> right_der;
+
+        for(int derivation_count = 0; derivation_count < 10000; derivation_count ++) {
+            cout << "(";
+            for(string val : stk) {
+                cout << val;
+            }
+            cout << ", ";
+            for(string val : input) {
+                cout << val;
+            }
+            cout << ", ";
+            for(int val : right_der) {
+                cout << val;
+            }
+            if(right_der.empty())
+                cout << LAMBDA;
+            cout << ") |-" << std::endl;
+
+
+            if(sintaxTable[ std::stoi( stk.back() ) ].count(input.front()) == 0) {
+                cout << " ERROR ";
+                return std::vector<int>();
+            }
+            lrTable lookup = sintaxTable[ std::stoi( stk.back() ) ][input.front()];
+
+            if(lookup.action_type == actionType::SHIFT) {
+                stk.push_back(input.front());
+                stk.push_back( std::to_string(lookup.index) ) ;
+                input.pop_front();
+            }
+
+            if(lookup.action_type == actionType::REDUCE) {
+                right_der.push_back(lookup.index);
+                int len = get_prod_size(lookup.index) * 2;
+                for(int i=0; i<len; i++) stk.pop_back();
+                string left = productions[lookup.index - 1].left;
+
+
+                int new_state = sintaxTable[ std::stoi(stk.back()) ][ left ].index;
+                stk.push_back(left);
+                stk.push_back(std::to_string( new_state ));
+            }
+
+            if(lookup.action_type == actionType::ACCEPT) {
+                cout << " ACCEPT\n";
+                return right_der;
+            }
+        }
+        return std::vector<int>();
+    }
 };
 
 
@@ -471,6 +541,25 @@ int main() {
     }
 
     input_grammar.calculate_syntax_table(1);
+
+    cout << "Input ";
+    getline(std::cin, line);
+    while(getline(std::cin, line)) {
+        std::vector<int> left_derriv = input_grammar.analyze(line);
+
+        if(left_derriv.empty()) {
+            cout << "DENY";
+        } else {
+            cout << "ACCEPT. Derivation = ";
+            for(auto el : left_derriv) {
+                cout << el;
+            }
+        }
+
+        cout << "\nInput: ";
+    }
+    /// example_word = ( n + ( n * n ) )
+    /// ex2 ( n )
 
     return 0;
 }
