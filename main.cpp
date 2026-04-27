@@ -15,6 +15,7 @@ using std::cout;
 
 const string DEFAULT_FILE = "input.txt";
 const string LAMBDA = "lam";
+const string HASHTAG = "#";
 
 ifstream getInputStream() {
     string filename;
@@ -43,6 +44,7 @@ typedef std::deque<string> prodRight;
 struct production {
     string left;
     prodRight right;
+    int production_nr;
 
     production() {}
     production(string left, prodRight right):left(left), right(right) {}
@@ -78,51 +80,68 @@ std::deque<production> read_prod(const string& line) {
 
     return result;
 }
-
+enum class actionType {
+    ERROR,
+    ACCEPT,
+    SHIFT,
+    REDUCE,
+    GO_TO
+};
 struct lrTable {
-    enum actionType {
-        ERROR,
-        ACCEPT,
-        SHIFT,
-        REDUCE,
-        GO_TO
-    } action_type = ERROR;
+    actionType action_type = actionType::ERROR;
     int index = 0; /// for shift, reduce, goto
 
 };
+std::string get_action(actionType a) {
+    switch (a) {
+    case actionType::ERROR:
+        return "ERROR";
+    case actionType::ACCEPT:
+        return "ACCEPT";
+    case actionType::SHIFT:
+        return "SHIFT";
+    case actionType::REDUCE:
+        return "REDUCE";
+    case actionType::GO_TO:
+        return "GO_TO";
+    }
+    return "UNKNOWN";
+}
 
 
 struct canonicProd {
-    string left;
-    std::vector<std::string> right;
+
+    production prod;
     size_t dot_pos = 0;
     int next_canonic_set;
 
-    canonicProd(std::string left, prodRight new_right): left(left), right(new_right.begin(), new_right.end()) {
+    canonicProd(std::string left, prodRight new_right, int prod_nr = 0): prod(left,new_right) {
+        prod.production_nr = prod_nr;
+
     }
-    canonicProd(production prod): canonicProd(prod.left, prod.right) {}
+    canonicProd(production prod): prod(prod) {}
 
     void move_dot() {
         dot_pos++;
     }
 
     std::string get_dot_val() {
-        if(dot_pos >= right.size())
+        if(dot_pos >= prod.right.size())
             return "";
-        return right[dot_pos];
+        return prod.right[dot_pos];
     }
 
 };
 
 inline bool operator==(canonicProd const& a, canonicProd const& b) noexcept {
-    return a.left == b.left
-           && a.right == b.right
+    return a.prod.left == b.prod.left
+           && a.prod.right == b.prod.right
            && a.dot_pos == b.dot_pos;
 }
 
 inline bool operator<(canonicProd const& a, canonicProd const& b) noexcept {
-    if (a.left != b.left) return a.left < b.left;
-    if (a.right != b.right) return a.right < b.right;
+    if (a.prod.left != b.prod.left) return a.prod.left < b.prod.left;
+    if (a.prod.right != b.prod.right) return a.prod.right < b.prod.right;
     return a.dot_pos < b.dot_pos;
 }
 
@@ -147,11 +166,11 @@ struct fullGrammar {
         std::string start = get_start();
         return start + "'0000";
     }
-    std::map< string, std::vector<prodRight>> get_prod_map() {
-        std::map<std::string, std::vector<prodRight>> m;
-        for (const auto& p : productions)
-            m[p.left].push_back(p.right);
-        return m;
+
+    void calculate_production_nr() {
+        for(size_t i = 0 ; i < productions.size(); i++) {
+            productions[i].production_nr = i+1;
+        }
     }
 
     void calculate_nonTerminals() {
@@ -237,7 +256,7 @@ struct fullGrammar {
         for (const auto& nonTerminal : nonTerminals) {
             follow[nonTerminal];
         }
-        follow[get_start()] = {"#"};
+        follow[get_start()] = {HASHTAG};
 
 
         std::vector<production> new_prods;
@@ -310,13 +329,12 @@ struct fullGrammar {
         if(follow.empty())
             calculate_follow();
         calculate_terminals();
-
-        auto productions_map = get_prod_map();
-
+        calculate_production_nr();
 
         std::set<canonicProd> known_prod;
         std::vector<canonicProd> set_prod;
         canonicProd a(get_fake_start(), {get_start()});
+        a.prod.production_nr = 0;
         a.next_canonic_set = 1;
 
 
@@ -331,39 +349,39 @@ struct fullGrammar {
                 exit(1);
             }
 
-            if(verbose) cout << "\nI" << i << " = [\n";
 
             sintaxTable.emplace_back();
 
             std::vector <string> checkNonTerminal;
             canonicProd current_prod = set_prod[i];
 
+
+            if(verbose) cout << "\nI" << i << " = [\n";
             for(int check_cnt = -1; check_cnt < (int) checkNonTerminal.size(); check_cnt++) {
-                string nonTerminal;
-                std::list<prodRight>new_prods;
+                std::list<production>new_prods;
                 if(check_cnt == -1) {
-                    nonTerminal = current_prod.left;
-                    prodRight p;
-                    p.insert(p.begin(), current_prod.right.begin(), current_prod.right.end());
-                    new_prods.push_back(p);
+                    new_prods.push_back(current_prod.prod);
                 } else {
-                    nonTerminal = checkNonTerminal[check_cnt];
-                    auto mp = productions_map[checkNonTerminal[check_cnt]];
-                    new_prods.insert(new_prods.begin(), mp.begin(), mp.end());
+                    for(production prod : productions) {
+                        if(prod.left == checkNonTerminal[check_cnt])
+                            new_prods.push_back(prod);
+                    }
+
                 }
 
                 /// cout << "Size of productions to check: " << new_prods.size() << std::endl;
 
                 for(auto prod : new_prods) {
 
+
                     if(check_cnt > -1)
-                        current_prod = canonicProd(nonTerminal,prod);
+                        current_prod = canonicProd(prod);
 
                     if(verbose) {
-                        cout << "   " << nonTerminal << " -> ";
+                        cout << "   " << current_prod.prod.left << " -> ";
                         size_t _i = 0;
                         if(_i == current_prod.dot_pos) cout << ".";
-                        for(auto el : prod) {
+                        for(auto el : prod.right) {
 
                             if(el != LAMBDA)
                                 cout << el << ' ';
@@ -372,12 +390,23 @@ struct fullGrammar {
                         }
                     }
 
-                    while(current_prod.get_dot_val() == LAMBDA){
+                    while(current_prod.get_dot_val() == LAMBDA) {
                         current_prod.move_dot();
                     }
                     if(current_prod.get_dot_val() == "") {
 
                         if(verbose)cout << "\n";
+
+                        current_prod.dot_pos--;
+                        if(current_prod.prod.left == get_fake_start() )
+                            sintaxTable[i][HASHTAG] = {actionType::ACCEPT, -1};
+                        else {
+                            for (auto x : follow[current_prod.prod.left]) {
+                                sintaxTable[i][x] = {actionType::REDUCE, current_prod.prod.production_nr};
+                            }
+
+                        }
+
                         continue;
                     }
 
@@ -398,11 +427,11 @@ struct fullGrammar {
 
 
                     if( !is_non_terminal(current_prod.get_dot_val()) ) {
-
-
-                        sintaxTable[i][current_prod.get_dot_val()] = {lrTable::SHIFT, current_prod.next_canonic_set};
+                        sintaxTable[i][current_prod.get_dot_val()] = {actionType::SHIFT, current_prod.next_canonic_set};
                         continue;
                     }
+
+                    sintaxTable[i][current_prod.get_dot_val()] = {actionType::GO_TO, current_prod.next_canonic_set};
 
                     if(std::find(checkNonTerminal.begin(),checkNonTerminal.end(), current_prod.get_dot_val()) == checkNonTerminal.end()) {
                         checkNonTerminal.push_back(current_prod.get_dot_val());
@@ -420,7 +449,7 @@ struct fullGrammar {
             cout << i << ": \n";
             for(auto pair_val : sintaxTable[i]) {
                 auto val = pair_val.second;
-                cout << pair_val.first << ' ' << val.action_type << ' ' << val.index << '\n';
+                cout << pair_val.first << ' ' << get_action(val.action_type) << ' ' << val.index << '\n';
             }
             cout << '\n';
         }
@@ -440,8 +469,6 @@ int main() {
         std::deque<production> new_productions = read_prod(line);
         input_grammar.productions.insert(input_grammar.productions.end(), new_productions.begin(),new_productions.end());
     }
-
-    // cout << "We read a grammar with " << input_grammar.productions.size() << " productions. \n";
 
     input_grammar.calculate_syntax_table(1);
 
